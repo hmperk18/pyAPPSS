@@ -10,6 +10,8 @@ import scipy.optimize as opt
 
 from analysis import smooth
 
+# new
+import math
 
 class Measure:
     """
@@ -656,37 +658,66 @@ class Measure:
         # print("Slope ", slope)
         # print("X-intercept ",  x_intercept)
         base_vel = np.array(x_intercept)
-        leftedge = []
-        rightedge = []
-        for i in range(len(self.vel)):
-            if self.vel[i] > base_vel[1]:
-                rightedge.append(i)
-            if self.vel[i] > base_vel[0]:
-                leftedge.append(i)
-        leftedge = max(leftedge) - 1
-        #This throws an error with max, and works correctly with min, so has been modified according.
-        rightedge=min(rightedge) + 1
-        #rightedge = max(rightedge) + 1
+
+        # anhad
+        # leftedge = []
+        # rightedge = []
+        # for i in range(len(self.vel)):
+        #     if self.vel[i] > base_vel[1]:
+        #         rightedge.append(i)
+        #     if self.vel[i] > base_vel[0]:
+        #         leftedge.append(i)
+        # leftedge = max(leftedge) - 1
+        # #This throws an error with max, and works correctly with min, so has been modified according.
+        # rightedge = min(rightedge) + 1
+        # #rightedge = max(rightedge) + 1
+
+        # print(leftedge, rightedge)
+        # print(self.vel[leftedge], self.vel[rightedge])
+
+        # new - improved from idl
+            # where returns 2 arrays: [0]condition met [1] otherwise
+            # potentially swap to the +- 1 (unsure rn)
+            # get the indices for the left and right edge velocities
+        rightedge = min(np.where(self.vel > base_vel[1])[0]) - 1
+        leftedge = max(np.where(self.vel < base_vel[0])[0]) + 1
+
         # Figure out the "peak" locations, i.e. where the spectrum hits a value of peak-rms
         # In the range given by the bases.
-        peakval = max(self.spec[rightedge:leftedge]) - self.rms
+        # peakval = max(self.spec[rightedge:leftedge]) - self.rms
+        # peak_vel = [(peakval - y[0]) / slope[0] + x[0], (peakval - y[2]) / slope[1] + x[2]]
+        # print("peak:", peakval, peak_vel)
+
+        # new - improved from idl
+            # i believe it is now checking the correct area for the peak
+        num_channels = len(self.vel)
+        peakval = max(self.spec[leftedge:rightedge]) - self.rms
         peak_vel = [(peakval - y[0]) / slope[0] + x[0], (peakval - y[2]) / slope[1] + x[2]]
         # print(peakval, peak_vel)
+
         # halfmax = [i*0.5 for i in base_vel] + [i*0.5 for i in peak_vel]
-        halfmax = []
-        for i in range(len(base_vel)):
-            halfmax.append((base_vel[i] + peak_vel[i]) * 0.5)
+        # halfmax = []
+        # for i in range(len(base_vel)):
+        #     halfmax.append((base_vel[i] + peak_vel[i]) * 0.5)
+
+        # fixed the list comprehension commented out above
+        halfmax = [(base_vel[i] + peak_vel[i])*0.5 for i in range(len(base_vel))]
         e_halfmax = np.mean(abs(self.rms / slope))
         W50 = abs(halfmax[1] - halfmax[0])
         W50err = e_halfmax
+
         # twentymax = [i*0.8 for i in base_vel] + [i*0.2 for i in peak_vel]
-        twentymax = []
-        for i in range(len(base_vel)):
-            twentymax.append(0.8 * base_vel[i] + 0.2 * peak_vel[i])
+        # twentymax = []
+        # for i in range(len(base_vel)):
+        #     twentymax.append(0.8 * base_vel[i] + 0.2 * peak_vel[i])
+
+        # again fixed list comp
+        twentymax = [(0.8 * base_vel[i]) + (0.2 * peak_vel[i]) for i in range(len(base_vel))]
         W20 = abs(twentymax[1] - twentymax[0])
         W20err = e_halfmax
         vsys = np.mean(halfmax)
         vsyserr = e_halfmax / np.sqrt(2)
+
         # y_intercept = [y[0] - slope[0] * x[0], y[2] - slope[1] * x[2]]
         self.ax.plot([base_vel[0], peak_vel[0], peak_vel[1], base_vel[1]], [0., peakval, peakval, 0.])
         self.ax.plot([vsys, vsys], [0, peakval], color='red', linestyle='--', linewidth=0.5)
@@ -694,8 +725,11 @@ class Measure:
         # Find the delta-v at the center channel
         centerchan = int((leftedge + rightedge) / 2.)
         deltav = abs(self.vel[centerchan + 1] - self.vel[centerchan - 1]) / 2.
+
         totflux = 0.  # Running total of the integrated flux density
-        for i in range(rightedge, leftedge):  # finding the area of the total region
+        # new - had to decrement from right to left
+            # with new edges right > left (bc index from velocity space)
+        for i in range(leftedge, rightedge):  # finding the area of the total region
             deltav = abs(self.vel[i] - self.vel[i - 2]) / 2.
             totflux += deltav * self.spec[i]
         totflux = totflux / 1000.
@@ -707,6 +741,7 @@ class Measure:
         # print(Lambda)
         W50 = W50 - 2 * deltav * Lambda  # Subtract off noise+instrumental broadening effect
         W20 = W20 - 2 * deltav * Lambda
+
         # Recalculate SN based on new W50.
         SN = 1000 * totflux / W50 * np.sqrt(W50.clip(min=None, max=400.) / 20.) / self.rms
         return SN, W20, W20err, W50, W50err, fluxerr, totflux, vsys, vsyserr
