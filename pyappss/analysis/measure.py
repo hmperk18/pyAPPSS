@@ -731,7 +731,7 @@ class Measure:
             # with new edges right > left (bc index from velocity space)
         for i in range(leftedge, rightedge):  # finding the area of the total region
             deltav = abs(self.vel[i] - self.vel[i - 2]) / 2.
-            totflux += deltav * self.spec[i]
+            totflux += deltav * self.spec[num_channels - i]
         totflux = totflux / 1000.
         # SN = 1000 * totflux / W50 * np.sqrt((np.choose(np.greater(W50, 400.), (W50, 400.))) / 20.) / self.rms
         SN = 1000 * totflux / W50 * np.sqrt(W50.clip(min=None, max=400.) / 20.) / self.rms
