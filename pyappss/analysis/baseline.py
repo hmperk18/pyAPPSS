@@ -56,6 +56,7 @@ class Baseline:
         self.baseline(noconfirm)
         self.__plot()
         input('Press Enter to end Baseline.')
+        plt.close()  # close the window (measure makes a new one)
 
     def __call__(self):
         return self.vel, self.res, self.rms
@@ -126,13 +127,17 @@ class Baseline:
         regions = []
 
         mask_regions = self.fig.canvas.mpl_connect('button_press_event', self.__maskregions_onclick)
-        response = input('Please select regions to be used for baselining. These regions should be free of RFI and the source.\nPress Enter once done selecting regions, or type "clear" and press Enter to clear region selection and start over.\n')
+        response = input('Please select regions to be used for baselining. These regions should be free of RFI and the source.'
+                         '\nPress Enter once done selecting regions, or type \'clear\' and press Enter to clear region selection and start over.\n')
         done_baselining = False
         while not done_baselining:
             if response == '':
-                self.fig.canvas.mpl_disconnect(mask_regions)
-                print('Calculating best baseline fit. Please wait.')
-                done_baselining = True
+                if len(regions) % 2 == 1:  # do nothing if enter and only an odd number of region selections
+                    response = input("Please complete your regions.\n")
+                else:
+                    self.fig.canvas.mpl_disconnect(mask_regions)
+                    print('Calculating best baseline fit. Please wait.\n')
+                    done_baselining = True
             elif response == 'clear':
                 regions.clear()
                 self.__plot()

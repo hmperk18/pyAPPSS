@@ -121,12 +121,12 @@ class Measure:
                     else:
                         print('Please enter a valid fit option!\nAccepted values are "gauss", "twopeak", and "trap"')
 
-
         if gauss:
             first_region = True
             fittype = 'gauss'
             self.gauss(first_region)
             self.__write_file(self.__get_comments(), fittype)
+
         if twopeak:
             fittype = 'twopeak'
             first_region = True
@@ -138,8 +138,9 @@ class Measure:
             first_region = True
             self.trapezoidal_fit(first_region)
             self.__write_file(self.__get_comments(), fittype)
-        else:
-            input('Press Enter to Exit')
+
+        input('Press Enter to end Measure.')
+        plt.close()  # close the window
 
     def load(self):
         """
@@ -604,11 +605,64 @@ class Measure:
         self.ax.axhline(y=0, dashes=[5, 5])
         title = self.filename[3:-5]
         self.ax.set(xlabel="Velocity (km/s)", ylabel="Flux (mJy)", title='AGC {}'.format(title))
-        print("\n Select points around the emission\nTwo points should be on the outside slope of the left side, and two points should be on the outside slope of the right side.")
+
         global cid
         global coords_trap
         coords_trap = list()
+
         cid = self.fig.canvas.mpl_connect('button_press_event', self.__trapezoidal_onclick)
+        response = input("\nSelect 4 points around the emission"
+                         "\nTwo points should be on the outside slope of the left side, and two points should be on the outside slope of the right side."
+                         "\nPress Enter when done or type \'clear\' and press Enter to restart selection at anytime.\n")
+
+        trap_good = False
+        while not trap_good:
+            if response == '':
+                # do nothing if the user presses enter to early
+                if len(coords_trap) < 4:
+                    response = input("Please select 4 points.\n")
+                else:
+
+                    coords_trap.sort(key=lambda x: x[0])
+
+                    # unpack the tuple
+                    x = [x[0] for x in coords_trap]
+                    y = [y[1] for y in coords_trap]
+
+                    SN, W20, W20err, W50, W50err, fluxerr, totflux, vsys, vsyserr = self.__trap_calc(x, y)
+                    response = input("Is this fit OK? Press \'Enter\' to accept the fit or \'clear\' to restart.\n")
+                    if response == '':
+                        trap_good = True
+                    # if clear should restart
+
+            elif response == 'clear':
+                # reset the plot and restart the interaction
+                del coords_trap
+                coords_trap = []
+                plt.cla()
+                self.ax.plot(v, s)
+                self.ax.axhline(y=0, dashes=[5, 5])
+                self.ax.set(xlabel="Velocity (km/s)", ylabel="Flux (mJy)", title='AGC {}'.format(title))
+                cid = self.fig.canvas.mpl_connect('button_press_event', self.__trapezoidal_onclick)
+                response = input("Points cleared! Select 4 new points. Press Enter when done or type \'clear\' and press Enter to clear the selection.\n")
+            else:
+                response = input("Please press Enter when done or type \'clear\' and press Enter to restart.\n")
+
+
+
+        # if good, then return values
+        self.w50 = W50
+        self.w50err = W50err
+        self.w20 = W20
+        self.w20err = W20err
+        self.vsys = vsys
+        self.vsyserr = vsyserr
+        self.flux = totflux
+        self.fluxerr = fluxerr
+        self.SN = SN
+
+        self.__print_values()
+
         # plt.pause(100)
 
     def __trapezoidal_onclick(self, event):
@@ -624,29 +678,9 @@ class Measure:
 
         if (ix, iy) not in coords_trap:
             coords_trap.append((ix, iy))
-
         if len(coords_trap) == 4:
             self.fig.canvas.mpl_disconnect(cid)
-            coords_trap.sort(key=lambda x: x[0])
 
-            # unpack the tuple
-            x = [x[0] for x in coords_trap]
-            y = [y[1] for y in coords_trap]
-
-            # print(x, y)
-            SN, W20, W20err, W50, W50err, fluxerr, totflux, vsys, vsyserr = self.__trap_calc(x, y)
-
-            self.w50 = W50
-            self.w50err = W50err
-            self.w20 = W20
-            self.w20err = W20err
-            self.vsys = vsys
-            self.vsyserr = vsyserr
-            self.flux = totflux
-            self.fluxerr = fluxerr
-            self.SN = SN
-
-            self.__print_values()
 
     def __trap_calc(self, x, y):
         """
@@ -731,7 +765,7 @@ class Measure:
             # with new edges right > left (bc index from velocity space)
         for i in range(leftedge, rightedge):  # finding the area of the total region
             deltav = abs(self.vel[i] - self.vel[i - 2]) / 2.
-            totflux += deltav * self.spec[num_channels - i]
+            totflux += deltav * self.spec[i]
         totflux = totflux / 1000.
         # SN = 1000 * totflux / W50 * np.sqrt((np.choose(np.greater(W50, 400.), (W50, 400.))) / 20.) / self.rms
         SN = 1000 * totflux / W50 * np.sqrt(W50.clip(min=None, max=400.) / 20.) / self.rms
@@ -828,8 +862,8 @@ class Measure:
         """
         helper method thats gets the user comments on the fit.
         """
-        comment = input('\n Enter any comments\n')
-        print('Spectral Line fit complete!')
+        comment = input('\nEnter any comments: ')
+        print('\nSpectral Line fit complete!')
         return comment
 
 
